@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fourier Transform Drawing with Epicycles</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+        }
+
+        canvas {
+            box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+
+<body>
+    <h1>By Ricci Aani</h1>
+    <canvas id="canvas" width="800" height="500"></canvas>
+    <script>
+        console.log("This is a Fourier Transform Drawing with Epicycles");
+        // Ilay Skutelsky
+        // Based on Daniel Shiffman's Coding Challenge 130.3: Drawing with Fourier Transform and Epicycles
+
+        const USER = 0;
+        const FOURIER = 1;
+
+        let x = [];
+        let fourierX = [];
+        let poppedFourierX = [];
+        let time = 0;
+        let path = [];
+        let drawing = [];
+        let state = -1;
+        let dt;
+        let speedFactor = 1;
+
+        class Complex {
+            constructor(re, im) {
+                this.re = re;
+                this.im = im;
+            }
+
+            add(other) {
+                return new Complex(this.re + other.re, this.im + other.im);
+            }
+
+            mul(other) {
+                return new Complex(
+                    this.re * other.re - this.im * other.im,
+                    this.re * other.im + this.im * other.re
+                );
+            }
+
+            mag() { // magnitude
+                return Math.sqrt(this.re * this.re + this.im * this.im);
+            }
+        }
+
+        function dft(x) {
+            const X = [];
+            const N = x.length;
+            for (let k = 0; k < N; k++) {
+                let sum = new Complex(0, 0);
+                for (let n = 0; n < N; n++) {
+                    const phi = (2 * Math.PI * k * n) / N;
+                    const c = new Complex(Math.cos(phi), -Math.sin(phi));
+                    sum = sum.add(x[n].mul(c));
+                }
+                sum.re = sum.re / N;
+                sum.im = sum.im / N;
+                const freq = k;
+                const amp = sum.mag();
+                const phase = Math.atan2(sum.im, sum.re);
+                X[k] = { re: sum.re, im: sum.im, freq, amp, phase };
+            }
+            return X;
+        }
+
+        function mousePressed(e) {
+            state = USER;
+            drawing = [];
+            x = [];
+            time = 0;
+            path = [];
+            speedFactor = 1;
+            drawing.push({ x: e.offsetX - canvas.width / 2, y: e.offsetY - canvas.height / 2 });
+        }
+
+        function mouseDragged(e) {
+            if (state === USER) {
+                drawing.push({ x: e.offsetX - canvas.width / 2, y: e.offsetY - canvas.height / 2 });
+            }
+        }
+
+        function mouseReleased() {
+            state = FOURIER;
+            const skip = 1;
+            for (let i = 0; i < drawing.length; i += skip) {
+                x.push(new Complex(drawing[i].x, drawing[i].y));
+            }
+            poppedFourierX = [];
+            fourierX = dft(x);
+            fourierX.sort((a, b) => b.amp - a.amp);
+        }
+
+        function setup() {
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'black';
+            ctx.textAlign = 'center';
+            ctx.font = '42px sans-serif';
+            ctx.fillText('Draw Something!', canvas.width / 2, canvas.height / 2 - 100);
+            ctx.font = '24px sans-serif';
+            ctx.fillText('then press ← to delete smallest epicycle,', canvas.width / 2, canvas.height / 2);
+            ctx.fillText('→ to bring it back, ↓ to slow down the spinning, and ↑ to speed it up', canvas.width / 2, canvas.height / 2 + 30);
+            ctx.font = '20px sans-serif';
+            ctx.fillText('Open the console for details', canvas.width / 2, canvas.height / 2 + 60);
+        }
+
+        function epicycles(x, y, rotation, fourier, ctx) {
+            for (let i = 0; i < fourier.length; i++) {
+                let prevx = x;
+                let prevy = y;
+                let freq = fourier[i].freq;
+                let radius = fourier[i].amp;
+                let phase = fourier[i].phase;
+                x += radius * Math.cos(freq * time + phase + rotation);
+                y += radius * Math.sin(freq * time + phase + rotation);
+
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+                ctx.beginPath();
+                ctx.arc(prevx, prevy, radius, 0, 2 * Math.PI);
+                ctx.stroke();
+                ctx.strokeStyle = 'black';
+                ctx.beginPath();
+                ctx.moveTo(prevx, prevy);
+                ctx.lineTo(x, y);
+                ctx.stroke();
+            }
+            return { x, y };
+        }
+
+        function draw() {
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+
+            if (state === USER) {
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.strokeStyle = 'black';
+                ctx.beginPath();
+                ctx.moveTo(drawing[0].x + canvas.width / 2, drawing[0].y + canvas.height / 2);
+                for (let i = 1; i < drawing.length; i++) {
+                    ctx.lineTo(drawing[i].x + canvas.width / 2, drawing[i].y + canvas.height / 2);
+                }
+                ctx.stroke();
+            } else if (state === FOURIER) {
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
+                ctx.beginPath();
+                ctx.moveTo(drawing[0].x + canvas.width / 2, drawing[0].y + canvas.height / 2);
+                for (let i = 1; i < drawing.length; i++) {
+                    ctx.lineTo(drawing[i].x + canvas.width / 2, drawing[i].y + canvas.height / 2);
+                }
+                ctx.stroke();
+
+                let v = epicycles(canvas.width / 2, canvas.height / 2, 0, fourierX, ctx);
+                path.unshift(v);
+
+                ctx.strokeStyle = 'black';
+                ctx.beginPath();
+                ctx.moveTo(path[0].x, path[0].y);
+                for (let i = 1; i < path.length; i++) {
+                    ctx.lineTo(path[i].x, path[i].y);
+                }
+                ctx.stroke();
+
+                if (path.length > 5000) {
+                    path.pop();
+                }
+
+                dt = (2 * Math.PI / (fourierX.length + poppedFourierX.length)) * speedFactor;
+                time += dt;
+
+                if (time > 2 * Math.PI) {
+                    time = 0;
+                    path = [];
+                }
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        function keyPressed(e) {
+            path = [];
+            time = 0;
+            if (e.key === 'ArrowLeft') {
+                if (fourierX.length === 1) return;
+                poppedFourierX.push(fourierX.pop());
+                console.log(fourierX.length + " epicycles are running");
+            } else if (e.key === 'ArrowRight') {
+                if (poppedFourierX.length === 0) return;
+                fourierX.push(poppedFourierX.pop());
+                console.log(fourierX.length + " epicycles are running");
+            } else if (e.key === 'ArrowDown') {
+                speedFactor *= 0.9;
+                speedFactor = Math.floor(speedFactor * 10000) / 10000;
+                console.log("speed factor is " + speedFactor);
+            } else if (e.key === 'ArrowUp') {
+                speedFactor *= 1.1;
+                speedFactor = Math.floor(speedFactor * 10000) / 10000;
+                console.log("speed factor is " + speedFactor);
+            }
+        }
+
+        document.addEventListener('mousedown', mousePressed);
+        document.addEventListener('mousemove', mouseDragged);
+        document.addEventListener('mouseup', mouseReleased);
+        document.addEventListener('keydown', keyPressed);
+
+        setup();
+        draw();
+    </script>
+</body>
+
+</html>

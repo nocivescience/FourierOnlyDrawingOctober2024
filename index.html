@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fourier Transform Drawing with Epicycles</title>
+</head>
+<style>
+    body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        margin: 0;
+        padding: 0;
+        background-color: #f0f0f0;
+    }
+
+    canvas {
+        box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.1);
+    }
+</style>
+
+<body>
+    <h1>By Ricci Aani</h1>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.3/p5.min.js"
+        integrity="sha512-0zGLOFv/+OQ6YfVCSGDQWhrDRx0ONmBqWvs3gI4olm8i6xtKoG1FhEnB4eTaWCVnojyfUDgE8Izeln+mAJAkFA=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script>
+        console.log("This is a Fourier Transform Drawing with Epicycles");
+        // Ilay Skutelsky
+        // Based on Daniel Shiffman's Coding Challenge 130.3: Drawing with Fourier Transform and Epicycles
+
+        const USER = 0;
+        const FOURIER = 1;
+
+        let x = [];
+        let fourierX = [];
+        let poppedFourierX = [];
+        let time = 0;
+        let path = [];
+        let drawing = [];
+        let state = -1;
+        let dt;
+        let speedFactor = 1;
+
+        class Complex {
+            constructor(re, im) {
+                this.re = re;
+                this.im = im;
+            }
+
+            add(other) {
+                return new Complex(this.re + other.re, this.im + other.im);
+            }
+
+            mul(other) {
+                return new Complex(
+                    this.re * other.re - this.im * other.im,
+                    this.re * other.im + this.im * other.re
+                );
+            }
+
+            mag() {
+                return Math.sqrt(this.re * this.re + this.im * this.im);
+            }
+        }
+
+        function dft(x) {
+            const X = [];
+            const N = x.length;
+            for (let k = 0; k < N; k++) {
+                let sum = new Complex(0, 0);
+                for (let n = 0; n < N; n++) {
+                    const phi = (TWO_PI * k * n) / N;
+                    const c = new Complex(Math.cos(phi), -Math.sin(phi));
+                    sum = sum.add(x[n].mul(c));
+                }
+                sum.re = sum.re / N;
+                sum.im = sum.im / N;
+                const freq = k;
+                const amp = sum.mag();
+                const phase = Math.atan2(sum.im, sum.re);
+                X[k] = { re: sum.re, im: sum.im, freq, amp, phase };
+            }
+            return X;
+        }
+
+        function mousePressed() {
+            state = USER;
+            drawing = [];
+            x = [];
+            time = 0;
+            path = [];
+            speedFactor = 1;
+        }
+
+        function mouseReleased() {
+            state = FOURIER;
+            const skip = 1;
+            for (let i = 0; i < drawing.length; i += skip) {
+                x.push(new Complex(drawing[i].x, drawing[i].y));
+            }
+            poppedFourierX = [];
+            fourierX = dft(x);
+            fourierX.sort((a, b) => b.amp - a.amp);
+        }
+
+        function setup() {
+            createCanvas(800, 500);
+            background(255);
+            fill(0);
+            textAlign(CENTER);
+            textSize(42);
+            text("Draw Something!", width / 2, height / 2 - 100);
+            text("then press ← to delete smallest epicycle, \n → to bring it back,", width / 2, height / 2);
+            text("↓ to slow down the spinning\n and ↑ to speed it up", width / 2, height / 2 + 100);
+            textSize(34);
+            text("Open the console for details", width / 2, height / 2 + 230);
+        }
+
+        function epicycles(x, y, rotation, fourier) {
+            for (let i = 0; i < fourier.length; i++) {
+                let prevx = x;
+                let prevy = y;
+                let freq = fourier[i].freq;
+                let radius = fourier[i].amp;
+                let phase = fourier[i].phase;
+                x += radius * cos(freq * time + phase + rotation);
+                y += radius * sin(freq * time + phase + rotation);
+
+                stroke(0, 100);
+                noFill();
+                ellipse(prevx, prevy, radius * 2);
+                stroke(0);
+                line(prevx, prevy, x, y);
+            }
+            return createVector(x, y);
+        }
+
+        function draw() {
+            if (state == USER) {
+                background(255);
+                let point = createVector(mouseX - width / 2, mouseY - height / 2);
+                drawing.push(point);
+                stroke(0);
+                noFill();
+                beginShape();
+                for (let v of drawing) {
+                    vertex(v.x + width / 2, v.y + height / 2);
+                }
+                endShape();
+            } else if (state == FOURIER) {
+                background(255);
+                stroke(200);
+                beginShape();
+                for (let i = 0; i < drawing.length; i++) {
+                    vertex(drawing[i].x + width / 2, drawing[i].y + height / 2);
+                }
+                endShape();
+                stroke(0);
+
+                let v = epicycles(width / 2, height / 2, 0, fourierX);
+                path.unshift(v);
+                beginShape();
+                noFill();
+                for (let i = 0; i < path.length; i++) {
+                    vertex(path[i].x, path[i].y);
+                }
+                endShape();
+
+                if (path.length > 5000) {
+                    path.pop();
+                }
+
+                dt = TWO_PI / (fourierX.length + poppedFourierX.length) * speedFactor;
+                time += dt;
+
+                if (time > TWO_PI) {
+                    time = 0;
+                    path = [];
+                }
+            }
+        }
+
+        function keyPressed() {
+            path = [];
+            time = 0;
+            if (keyCode === LEFT_ARROW) {
+                if (fourierX.length === 1) return;
+                poppedFourierX.push(fourierX.pop());
+                console.log(fourierX.length + " epicycles are running");
+            }
+            else if (keyCode === RIGHT_ARROW) {
+                if (poppedFourierX.length === 0) return;
+                fourierX.push(poppedFourierX.pop());
+                console.log(fourierX.length + " epicycles are running");
+            }
+            else if (keyCode === DOWN_ARROW) {
+                speedFactor *= 0.9;
+                speedFactor = floor(speedFactor * 10000) / 10000;
+                console.log("speed factor is " + speedFactor);
+            }
+            else if (keyCode === UP_ARROW) {
+                speedFactor *= 1.1;
+                speedFactor = floor(speedFactor * 10000) / 10000;
+                console.log("speed factor is " + speedFactor);
+            }
+        }
+
+    </script>
+</body>
+
+</html>
